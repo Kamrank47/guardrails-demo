@@ -67,3 +67,4 @@ deny contains msg if {
 	is_string(c.expressions.password.constant_value)
 	msg := sprintf("%s: password is a literal, use a sensitive variable or a secrets manager", [c.address])
 }
+# CI gate exercised by a test PR.
