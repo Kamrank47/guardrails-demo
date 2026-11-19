@@ -1,0 +1,41 @@
+name: guardrails
+on:
+  pull_request:
+    paths: ["terraform/**", "policy/**"]
+permissions:
+  contents: read
+  pull-requests: write
+jobs:
+  gate:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        dir: [terraform/good, terraform/ai-draft]
+    # ai-draft is expected to fail: it proves the gate works.
+    continue-on-error: ${{ matrix.dir == 'terraform/ai-draft' }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: hashicorp/setup-terraform@v3
+      - name: Static scan
+        uses: aquasecurity/trivy-action@0.28.0
+        with:
+          scan-type: config
+          scan-ref: ${{ matrix.dir }}
+          exit-code: "1"
+          severity: HIGH,CRITICAL
+      - name: Plan
+        working-directory: ${{ matrix.dir }}
+        env:
+          AWS_ACCESS_KEY_ID: test
+          AWS_SECRET_ACCESS_KEY: test
+          TF_VAR_db_password: ci-placeholder
+        run: |
+          terraform init -backend=false
+          terraform plan -refresh=false -out=plan.out \
+            -input=false
+          terraform show -json plan.out > plan.json
+      - name: Policy gate (OPA / Conftest)
+        uses: instrumenta/conftest-action@master
+        with:
+          files: ${{ matrix.dir }}/plan.json
+          policy: policy
